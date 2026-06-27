@@ -718,6 +718,42 @@
     }
     .form-success p { color: var(--body); }
 
+    /* ── Balloon burst ───────────────────────────────────────────────── */
+    #balloon-stage {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      z-index: 9999;
+    }
+
+    .balloon {
+      position: absolute;
+      bottom: -120px;
+      width: 52px;
+      height: 64px;
+      border-radius: 50% 50% 50% 50% / 55% 55% 45% 45%;
+      opacity: 0;
+      animation: balloonRise var(--rise-dur, 4.2s) var(--rise-delay, 0s) ease-in forwards;
+    }
+
+    .balloon::after {
+      content: '';
+      display: block;
+      width: 2px;
+      height: 22px;
+      background: rgba(0,0,0,.18);
+      margin: 1px auto 0;
+      border-radius: 0 0 2px 2px;
+    }
+
+    @keyframes balloonRise {
+      0%   { opacity: 0;   transform: translateY(0)    rotate(0deg);   }
+      8%   { opacity: 1; }
+      50%  { transform: translateY(-55vh)  rotate(var(--sway, 8deg));  }
+      100% { opacity: 0;   transform: translateY(-110vh) rotate(0deg); }
+    }
+
     /* ── Footer ──────────────────────────────────────────────────────── */
     footer {
       background: var(--void);
@@ -1259,6 +1295,7 @@
                 <div class="field">
                   <label for="phone">Phone <span class="opt">(optional)</span></label>
                   <input type="tel" id="phone" name="phone" placeholder="+1 (555) 000-0000" autocomplete="tel" />
+                  <span class="error-msg" id="phone-error" role="alert">Please enter a valid phone number.</span>
                 </div>
                 <div class="field">
                   <label for="service">Service</label>
@@ -1285,8 +1322,8 @@
 
             <div class="form-success" id="form-success" aria-live="polite">
               <div class="success-icon" aria-hidden="true">&#10003;</div>
-              <h3>Message received.</h3>
-              <p>We'll have a proposal in your inbox within one business day.</p>
+              <h3>Hurray — thank you for your submission!</h3>
+              <p>We'll get back to you within 3 business days.</p>
             </div>
           </div>
 
@@ -1435,45 +1472,140 @@
     /* ── Form ───────────────────────────────────────────────────────── */
     const form    = document.getElementById('enquiry-form');
     const success = document.getElementById('form-success');
-    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    /* ── Post-submit hook: voice + balloons ─────────────────────────── */
+    const BALLOON_COLORS = [
+      '#FF6B6B','#FFD93D','#6BCB77','#4D96FF',
+      '#FF6FD8','#FF9A3C','#A29BFE','#00C9A7',
+    ];
+    const SUCCESS_MSG = 'Hurray, thank you for your submission, we will get back to you in 3 business days.';
+
+    function speakSuccess() {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(SUCCESS_MSG);
+      utt.rate   = 0.97;
+      utt.pitch  = 1.05;
+      utt.volume = 1;
+      window.speechSynthesis.speak(utt);
+    }
+
+    function launchBalloons() {
+      const stage = document.getElementById('balloon-stage');
+      stage.innerHTML = '';
+      const count = 22;
+      for (let i = 0; i < count; i++) {
+        const b = document.createElement('div');
+        b.className = 'balloon';
+        const color = BALLOON_COLORS[i % BALLOON_COLORS.length];
+        const left  = 4 + Math.random() * 92;           // 4–96 % from left
+        const delay = (Math.random() * 1.8).toFixed(2); // 0–1.8 s stagger
+        const dur   = (3.6 + Math.random() * 1.8).toFixed(2); // 3.6–5.4 s rise
+        const sway  = (Math.random() > 0.5 ? 1 : -1) * (5 + Math.random() * 12);
+        b.style.cssText = [
+          `background:${color}`,
+          `left:${left}%`,
+          `--rise-delay:${delay}s`,
+          `--rise-dur:${dur}s`,
+          `--sway:${sway}deg`,
+        ].join(';');
+        stage.appendChild(b);
+      }
+      // Clear DOM after the last balloon finishes
+      setTimeout(() => { stage.innerHTML = ''; }, 7500);
+    }
+
+    function onFormSuccess() {
+      form.style.display = 'none';
+      success.classList.add('visible');
+      success.querySelector('h3').focus();
+      form.reset();
+      launchBalloons();
+      speakSuccess();
+    }
+    /* ─────────────────────────────────────────────────────────────────── */
+
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    /* E.164 / common formats: optional +, country code, 7-15 digits, spaces/dashes/parens allowed */
+    const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
+    /* Name: at least 2 chars, letters/spaces/hyphens/apostrophes, no digits */
+    const NAME_RE  = /^[A-Za-zÀ-ÖØ-öø-ÿ'\- ]{2,80}$/;
 
     function showError(inputId, errorId) {
-      document.getElementById(inputId).classList.add('invalid');
+      const el = document.getElementById(inputId);
+      el.classList.add('invalid');
+      el.setAttribute('aria-invalid', 'true');
       document.getElementById(errorId).classList.add('visible');
     }
 
     function clearError(inputId, errorId) {
-      document.getElementById(inputId).classList.remove('invalid');
+      const el = document.getElementById(inputId);
+      el.classList.remove('invalid');
+      el.removeAttribute('aria-invalid');
       document.getElementById(errorId).classList.remove('visible');
     }
 
-    ['name', 'email', 'message'].forEach(id => {
-      document.getElementById(id).addEventListener('input', () => {
-        document.getElementById(id).classList.remove('invalid');
-        document.getElementById(id + '-error').classList.remove('visible');
-      });
+    /* Pre-hook: validates all fields and returns true only if everything passes */
+    function validateForm(fields) {
+      let valid = true;
+
+      if (!NAME_RE.test(fields.name)) {
+        document.getElementById('name-error').textContent =
+          fields.name.length === 0 ? 'Please enter your name.'
+                                   : 'Name must be 2–80 letters, spaces, hyphens, or apostrophes.';
+        showError('name', 'name-error');
+        valid = false;
+      }
+
+      if (!EMAIL_RE.test(fields.email)) {
+        document.getElementById('email-error').textContent =
+          fields.email.length === 0 ? 'Please enter your email address.'
+                                    : 'Please enter a valid email (e.g. jane@company.com).';
+        showError('email', 'email-error');
+        valid = false;
+      }
+
+      /* Phone is optional but must be valid if provided */
+      if (fields.phone.length > 0 && !PHONE_RE.test(fields.phone)) {
+        showError('phone', 'phone-error');
+        valid = false;
+      }
+
+      if (fields.message.length < 10) {
+        document.getElementById('message-error').textContent =
+          fields.message.length === 0 ? 'Please describe your project.'
+                                      : 'Message is too short — please add a few more details.';
+        showError('message', 'message-error');
+        valid = false;
+      }
+
+      return valid;
+    }
+
+    /* Clear errors on input so feedback is immediate */
+    ['name', 'email', 'phone', 'message'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => clearError(id, id + '-error'));
     });
 
     form.addEventListener('submit', e => {
       e.preventDefault();
 
-      clearError('name', 'name-error');
-      clearError('email', 'email-error');
-      clearError('message', 'message-error');
+      ['name', 'email', 'phone', 'message'].forEach(id => clearError(id, id + '-error'));
 
-      const name    = document.getElementById('name').value.trim();
-      const email   = document.getElementById('email').value.trim();
-      const phone   = document.getElementById('phone').value.trim();
-      const service = document.getElementById('service').value;
-      const message = document.getElementById('message').value.trim();
+      const fields = {
+        name:    document.getElementById('name').value.trim(),
+        email:   document.getElementById('email').value.trim(),
+        phone:   document.getElementById('phone').value.trim(),
+        service: document.getElementById('service').value,
+        message: document.getElementById('message').value.trim(),
+      };
 
-      let valid = true;
-
-      if (!name)                { showError('name',    'name-error');    valid = false; }
-      if (!EMAIL_RE.test(email)) { showError('email',   'email-error');   valid = false; }
-      if (!message)             { showError('message', 'message-error'); valid = false; }
-
-      if (!valid) { form.querySelector('.invalid')?.focus(); return; }
+      if (!validateForm(fields)) {
+        form.querySelector('.invalid')?.focus();
+        return;
+      }
 
       const submitBtn = form.querySelector('.btn-submit');
       submitBtn.disabled = true;
@@ -1482,14 +1614,11 @@
       fetch('https://formsubmit.co/ajax/etorquay@gmail.com', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body:    JSON.stringify({ name, email, phone, service, message }),
+        body:    JSON.stringify(fields),
       })
         .then(r => r.json())
         .then(() => {
-          form.style.display = 'none';
-          success.classList.add('visible');
-          success.querySelector('h3').focus();
-          form.reset();
+          onFormSuccess();
         })
         .catch(() => {
           submitBtn.disabled = false;
@@ -1540,6 +1669,9 @@
       });
     })();
   </script>
+
+  <!-- Balloon burst stage (populated by JS on form success) -->
+  <div id="balloon-stage" aria-hidden="true"></div>
 
 </body>
 </html>
