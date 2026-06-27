@@ -6,6 +6,10 @@ A single-page static marketing website for **DevForge**, a fictional software de
 
 [https://etorquay.github.io/WSQ-Claude/](https://etorquay.github.io/WSQ-Claude/)
 
+## Preview
+
+![DevForge site screenshot](screenshot.png)
+
 ## Project Structure
 
 Everything lives in a single self-contained file:
