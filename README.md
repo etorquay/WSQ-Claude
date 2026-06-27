@@ -30,11 +30,18 @@ Then visit `http://localhost:8080`.
 
 ## Features
 
-- Responsive layout (breakpoints at 480px, 640px, 768px)
-- Five sections: Home, Services, Testimonials, Contact, Footer
+- **Premium dark design** — navy void (`#080D1A`) background with electric teal (`#00C9A7`) accent
+- **DM Serif Display + Inter** type pairing — serif display for personality, Inter for UI clarity
+- **Signature headline** — CSS `text-stroke` outlined "That Scales." in teal
+- **Ambient engineering grid** — subtle CSS background-image grid on the hero
+- **6 sections**: Hero, Tech Strip, Services, Process (new), Testimonials, Contact + Footer
+- **Tech stack pill strip** between hero and services
+- **Service cards** with technology tags and teal top-border hover reveal
+- **Process section** — 4-step engagement model on dark background
 - Fixed navigation with hamburger menu for mobile
 - Contact form with client-side validation
-- CSS custom properties for easy theming
+- Fully responsive (breakpoints at 480px, 640px, 768px, 960px)
+- Accessible: semantic HTML, ARIA labels, keyboard focus, reduced-motion support
 
 ## Deployment
 
